@@ -1,0 +1,117 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#1f6f4a"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="CampusBite"><link rel="apple-touch-icon" href="icon-192.png">
+<title>CampusBite – College Canteen</title>
+<style>
+:root{--g:#1f6f4a;--o:#f59e0b;--bg:#f6f3ec;--c:#fff;--t:#222}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--t)}
+header{background:var(--g);color:#fff;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:10px 20px;position:sticky;top:0;z-index:5}
+header b{font-size:1.3rem;margin-right:auto}header a{color:#fff;text-decoration:none;cursor:pointer;padding:4px 8px;border-radius:14px}header a:hover{background:#ffffff33}
+main{max-width:1050px;margin:auto;padding:16px}.hero{background:linear-gradient(135deg,var(--g),#2f9e6b);color:#fff;border-radius:20px;padding:36px 24px;margin-bottom:18px}
+.hero h1{margin:0 0 8px;font-size:2rem}.btn{background:var(--o);border:0;color:#222;font-weight:700;padding:9px 18px;border-radius:20px;cursor:pointer;margin:4px 4px 4px 0}
+.btn.s{background:#e5e7eb}.btn.r{background:#dc2626;color:#fff}.btn:disabled{opacity:.4;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.card{background:var(--c);border-radius:16px;padding:14px;box-shadow:0 2px 8px #0001}
+.emo{font-size:3.2rem;text-align:center;background:#fdf3d8;border-radius:12px;padding:8px}.tag{font-size:.75rem;background:#e0f2e9;color:var(--g);padding:2px 8px;border-radius:10px}
+.oos{color:#dc2626;font-weight:700}input,select,textarea{padding:8px;border:1px solid #ccc;border-radius:10px;margin:3px 0;font:inherit;max-width:100%}
+table{width:100%;border-collapse:collapse;background:var(--c);border-radius:12px;overflow:hidden;font-size:.9rem}th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}th{background:#e0f2e9}
+.wrap{overflow-x:auto}.bar{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.pill{padding:6px 14px;border-radius:18px;background:#fff;cursor:pointer;border:1px solid #ddd}.pill.on{background:var(--g);color:#fff}
+.trk{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0}.trk span{padding:5px 10px;border-radius:14px;background:#e5e7eb;font-size:.85rem}.trk .d{background:#bbf7d0}.trk .c{background:var(--o);font-weight:700}
+#toast{position:fixed;bottom:20px;right:20px;background:#222;color:#fff;padding:12px 18px;border-radius:12px;display:none;z-index:9}
+.stat{font-size:1.7rem;font-weight:800;color:var(--g)}.form{max-width:380px}.form input,.form select{width:100%}
+@media(max-width:700px){header{padding:calc(8px + env(safe-area-inset-top)) 12px 8px}#nav{display:flex;gap:4px;overflow-x:auto;width:100%;white-space:nowrap;-webkit-overflow-scrolling:touch}main{padding:12px 12px calc(20px + env(safe-area-inset-bottom))}.hero{padding:24px 16px}.grid{grid-template-columns:repeat(2,1fr);gap:10px}.btn{min-height:40px}input,select,textarea{font-size:16px}}
+#inst{display:none;position:fixed;bottom:16px;left:16px;z-index:9}
+</style></head><body>
+<header><b>🍽️ CampusBite</b><span id="nav"></span></header><main id="app"></main><div id="toast"></div><button id="inst" class="btn">📲 Install app</button>
+<script>
+const $=s=>document.querySelector(s),E={'Breakfast':'🥞','Main Course':'🍛','Snacks':'🥪','Beverages':'🍵'};
+let user=JSON.parse(localStorage.u||'null'),tok=localStorage.t||'',cart=JSON.parse(localStorage.c||'[]'),foods=[],F={q:'',cat:'All',sort:'Popular'};
+const STEPS=['Pending','Accepted','Preparing','Ready for Pickup','Completed'],TIMES=['10:30 AM','11:00 AM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','4:00 PM'];
+const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2500)};
+const api=async(p,m='GET',b)=>{const r=await fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},body:b?JSON.stringify(b):undefined});
+ const d=await r.json();if(!r.ok){toast('⚠ '+d.error);throw new Error(d.error)}return d};
+const save=()=>localStorage.c=JSON.stringify(cart);
+const setUser=d=>{user=d.user;tok=d.token;localStorage.u=JSON.stringify(user);localStorage.t=tok};
+function logout(){user=null;tok='';localStorage.removeItem('u');localStorage.removeItem('t');go('login')}
+function nav(){$('#nav').innerHTML=!user?'<a onclick="go(\'login\')">Login</a><a onclick="go(\'register\')">Register</a><a onclick="go(\'admin-login\')">Admin</a>':
+ user.role==='admin'?'<a onclick="go(\'admin\')">Dashboard</a><a onclick="go(\'a-foods\')">Food</a><a onclick="go(\'a-orders\')">Orders</a><a onclick="go(\'a-pay\')">Payments</a><a onclick="go(\'a-users\')">Students</a><a onclick="logout()">Logout</a>':
+ `<a onclick="go('home')">Home</a><a onclick="go('menu')">Menu</a><a onclick="go('orders')">My Orders</a><a onclick="go('cart')">Cart (${cart.reduce((a,c)=>a+c.q,0)})</a><a onclick="go('profile')">Profile</a><a onclick="logout()">Logout</a>`}
+async function go(p,arg){nav();const a=$('#app');
+ if(!user&&!['login','register','admin-login'].includes(p))p='login';
+ if(user&&user.role!=='admin'&&p.startsWith('a'))p='home';
+ if(['home','menu','food'].includes(p)||p==='cart'||p==='checkout')foods=await api('/foods');
+ const R={home,menu,food,cart:cartPg,checkout,orders,profile,login:()=>authPg(0),register:()=>authPg(1),'admin-login':()=>authPg(2),admin:dash,'a-foods':aFoods,'a-orders':aOrders,'a-pay':aPay,'a-users':aUsers};
+ a.innerHTML=await R[p](arg);window.scrollTo(0,0)}
+function authPg(m){return `<div class="card form"><h2>${['Student Login','Register','Admin Login'][m]}</h2>
+ ${m==1?'<input id="n" placeholder="Full name"><input id="ci" placeholder="College ID"><input id="dp" placeholder="Department"><select id="yr"><option>1</option><option>2</option><option>3</option><option>4</option></select><input id="ph" placeholder="Phone (10 digits)">':''}
+ <input id="em" placeholder="Email" value="${m==0?'student@college.com':m==2?'admin@college.com':''}"><input id="pw" type="password" placeholder="Password" value="${m==0?'student123':m==2?'admin123':''}">
+ <button class="btn" onclick="doAuth(${m})">${m==1?'Register':'Login'}</button></div>`}
+async function doAuth(m){const b={email:$('#em').value,password:$('#pw').value};
+ if(m==1)Object.assign(b,{name:$('#n').value,college_id:$('#ci').value,department:$('#dp').value,year:+$('#yr').value,phone:$('#ph').value});if(m==2)b.admin=1;
+ setUser(await api(m==1?'/register':'/login','POST',b));toast('Welcome '+user.name);go(user.role==='admin'?'admin':'home')}
+function fcard(f){const o=!f.availability||f.available_quantity<=0;return `<div class="card"><div class="emo" onclick="go('food',${f.food_id})" style="cursor:pointer">${E[f.category]}</div>
+ <h3 style="margin:8px 0 2px">${f.food_name}</h3><span class="tag">${f.category}</span><p style="font-size:.85rem;margin:6px 0">${f.description}</p>
+ <b>₹${+f.price}</b> · ⭐${f.rating||'–'}<br><small>${o?'<span class="oos">OUT OF STOCK</span>':f.available_quantity+' left'}</small><br>
+ <button class="btn" ${o?'disabled':''} onclick="add(${f.food_id},1)">Add to Cart</button></div>`}
+function add(id,q){const f=foods.find(x=>x.food_id==id),c=cart.find(x=>x.id==id);const n=(c?c.q:0)+q;if(n>f.available_quantity)return toast('Only '+f.available_quantity+' available');
+ c?c.q=n:cart.push({id,q});save();nav();toast(f.food_name+' added to cart')}
+function home(){return `<div class="hero"><h1>Order Food. Skip the Queue.</h1><p>Pre-order your favorite college canteen food and collect it at your selected pickup time.</p>
+ <button class="btn" onclick="go('menu')">Order Now</button><button class="btn s" onclick="go('menu')">View Menu</button></div>
+ <h2>⭐ Today's Special</h2><div class="grid">${foods.filter(f=>['Chicken Biriyani','Parotta'].includes(f.food_name)).map(fcard).join('')}</div>
+ <h2>🔥 Popular Items</h2><div class="grid">${[...foods].sort((a,b)=>b.sold-a.sold).slice(0,4).map(fcard).join('')}</div>
+ <h2>Categories</h2><div class="bar">${Object.keys(E).map(c=>`<span class="pill" onclick="F.cat='${c}';go('menu')">${E[c]} ${c}</span>`).join('')}</div>`}
+function menu(){let l=foods.filter(f=>f.food_name.toLowerCase().includes(F.q.toLowerCase())&&(F.cat=='All'||f.category==F.cat));
+ if(F.sort=='Price: Low to High')l.sort((a,b)=>a.price-b.price);else if(F.sort=='Price: High to Low')l.sort((a,b)=>b.price-a.price);
+ else if(F.sort=='Popular')l.sort((a,b)=>b.sold-a.sold);else l=l.filter(f=>f.availability);
+ return `<input id="sq" placeholder="Search for food..." value="${F.q}" oninput="F.q=this.value;go('menu');setTimeout(()=>{$('#sq').focus();$('#sq').setSelectionRange(99,99)})" style="width:100%">
+ <div class="bar">${['All',...Object.keys(E)].map(c=>`<span class="pill ${F.cat==c?'on':''}" onclick="F.cat='${c}';go('menu')">${c}</span>`).join('')}
+ <select onchange="F.sort=this.value;go('menu')">${['Popular','Price: Low to High','Price: High to Low','Available Items'].map(s=>`<option ${F.sort==s?'selected':''}>${s}</option>`).join('')}</select></div>
+ <div class="grid">${l.map(fcard).join('')||'No food found'}</div>`}
+function food(id){const f=foods.find(x=>x.food_id==id);return `<div class="card form" style="max-width:520px"><div class="emo" style="font-size:6rem">${E[f.category]}</div><h2>${f.food_name}</h2><p>${f.description}</p>
+ <h3>₹${+f.price} · ⭐${f.rating||'No ratings'}</h3><p>${f.available_quantity} available</p>Quantity: <button class="btn s" onclick="qv(-1)">-</button> <b id="qv">1</b> <button class="btn s" onclick="qv(1)">+</button><br>
+ <button class="btn" ${f.availability?'':'disabled'} onclick="add(${id},+$('#qv').textContent)">ADD TO CART</button></div>`}
+const qv=d=>{const e=$('#qv');e.textContent=Math.max(1,+e.textContent+d)};
+function cartPg(){if(!cart.length)return '<h2>Your cart is empty</h2><button class="btn" onclick="go(\'menu\')">View Menu</button>';let t=0;
+ const r=cart.map(c=>{const f=foods.find(x=>x.food_id==c.id);t+=f.price*c.q;return `<tr><td>${f.food_name}</td><td><button class="btn s" onclick="cq(${c.id},-1)">-</button> ${c.q} <button class="btn s" onclick="cq(${c.id},1)">+</button></td><td>₹${+f.price}</td><td>₹${f.price*c.q}</td><td><button class="btn r" onclick="cq(${c.id},-99)">✕</button></td></tr>`}).join('');
+ return `<h2>Cart</h2><div class="wrap"><table><tr><th>Food</th><th>Quantity</th><th>Price</th><th>Subtotal</th><th></th></tr>${r}</table></div>
+ <p>Total Items: ${cart.reduce((a,c)=>a+c.q,0)}<br><b>Grand Total: ₹${t}</b> (no delivery charges – pickup only)</p><button class="btn" onclick="go('checkout')">Proceed to Checkout</button>`}
+function cq(id,d){const c=cart.find(x=>x.id==id);c.q+=d;if(c.q<=0)cart=cart.filter(x=>x.id!=id);save();go('cart')}
+function checkout(){if(!cart.length)return cartPg();let t=0;const l=cart.map(c=>{const f=foods.find(x=>x.food_id==c.id);t+=f.price*c.q;return `<li>${f.food_name} × ${c.q} — ₹${f.price*c.q}</li>`}).join('');
+ return `<div class="card form"><h2>Checkout</h2><ul>${l}</ul><b>Total: ₹${t}</b><h3>Student Details</h3><p>${user.name}<br>ID: ${user.college_id} · ${user.department}<br>📞 ${user.phone}</p>
+ <h3>Pickup Time</h3><select id="pt">${TIMES.map(x=>`<option>${x}</option>`).join('')}</select><h3>Payment Method (simulated)</h3>
+ <select id="pm"><option>UPI</option><option>Card</option><option>Cash at Canteen</option></select><br><button class="btn" onclick="place()">PLACE ORDER</button></div>`}
+async function place(){const d=await api('/orders','POST',{items:cart.map(c=>({food_id:c.id,quantity:c.q})),pickup_time:$('#pt').value,method:$('#pm').value});
+ cart=[];save();nav();toast('Order placed!');$('#app').innerHTML=`<div class="card form"><h2>🎉 Order Placed Successfully!</h2><p>Order ID: <b>#${d.order_id}</b><br>Pickup Time: ${d.pickup_time}<br>Total: ₹${d.total}<br>Payment: ${d.payment}</p>${track('Pending')}<button class="btn" onclick="go('orders')">Track Order</button></div>`}
+const track=s=>{if(s=='Cancelled')return '<div class="trk"><span style="background:#fecaca">✕ Cancelled</span></div>';const i=STEPS.indexOf(s);
+ return '<div class="trk">'+STEPS.map((x,k)=>`<span class="${k<i?'d':k==i?'c':''}">${k<i?'✓':k==i?'●':'○'} ${x=='Pending'?'Order Placed':x}</span>`).join('')+'</div>'};
+async function orders(){const o=await api('/orders/mine');return '<h2>My Orders</h2>'+(o.map(x=>`<div class="card" style="margin-bottom:12px"><b>Order #${x.order_id}</b> · ${new Date(x.order_date).toLocaleString()}<br>${x.items}<br>Total: ₹${+x.total_amount} · Pickup: ${x.pickup_time} · Payment: ${x.payment_status}<br>Status: <b>${x.order_status}</b>${track(x.order_status)}
+ ${x.order_status=='Completed'?`<button class="btn s" onclick="rate(${x.order_id})">⭐ Rate a food</button>`:''}</div>`).join('')||'No orders yet')}
+async function rate(){const n=prompt('Food name to review?');const f=foods.find(x=>x.food_name.toLowerCase()==(n||'').toLowerCase())||(foods=await api('/foods')).find(x=>x.food_name.toLowerCase()==(n||'').toLowerCase());
+ if(!f)return toast('Food not found');const r=+prompt('Rating 1-5');if(r>=1&&r<=5){await api('/reviews','POST',{food_id:f.food_id,rating:r,comment:prompt('Comment')||''});toast('Thanks for your review')}}
+function profile(){return `<div class="card form"><h2>Profile</h2>Email: ${user.email}<br>College ID: ${user.college_id}<br><input id="n" value="${user.name}"><input id="ph" value="${user.phone||''}"><input id="dp" value="${user.department||''}">
+ <select id="yr">${[1,2,3,4].map(y=>`<option ${user.year==y?'selected':''}>${y}</option>`).join('')}</select><br><button class="btn" onclick="saveP()">Save</button></div>`}
+async function saveP(){setUser(await api('/profile','PUT',{name:$('#n').value,phone:$('#ph').value,department:$('#dp').value,year:+$('#yr').value}));toast('Profile updated');go('profile')}
+// ---- ADMIN ----
+const tbl=(h,r)=>`<div class="wrap"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${r.map(x=>`<tr>${x.map(c=>`<td>${c??''}</td>`).join('')}</tr>`).join('')}</table></div>`;
+async function dash(){const d=await api('/admin/reports'),s=d.stats,mx=Math.max(1,...d.daily.map(x=>+x.revenue));
+ return `<h2>Admin Dashboard</h2><div class="grid">${[['Total Students',s.students],['Today\'s Orders',s.orders_today],['Today\'s Revenue','₹'+s.revenue_today],['Available Food Items',s.available_items]].map(x=>`<div class="card">${x[0]}<div class="stat">${x[1]}</div></div>`).join('')}</div>
+ <h3>Daily Sales (revenue)</h3><div class="card" style="display:flex;gap:10px;align-items:flex-end;height:170px">${[...d.daily].reverse().map(x=>`<div style="flex:1;text-align:center;font-size:.7rem"><div style="background:var(--g);height:${x.revenue/mx*110}px;border-radius:6px 6px 0 0"></div>₹${x.revenue}<br>${new Date(x.day).toLocaleDateString('en',{day:'numeric',month:'short'})}</div>`).join('')||'No sales yet'}</div>
+ <h3>Daily Sales Report</h3>${tbl(['Date','Orders','Revenue','Completed','Cancelled'],d.daily.map(x=>[new Date(x.day).toLocaleDateString(),x.orders,'₹'+x.revenue,x.completed,x.cancelled]))}
+ <h3>Popular Food</h3>${tbl(['Food','Sold'],d.popular.map(x=>[x.food_name,x.sold]))}<h3>⚠ Low Stock Alert</h3>${tbl(['Food','Remaining'],d.lowStock.map(x=>[x.food_name,x.available_quantity]))}`}
+async function aFoods(){foods=await api('/foods');window.FL=foods;
+ return `<h2>Add Food</h2><div class="card form" style="max-width:100%"><input id="fn" placeholder="Food name"><select id="fc">${Object.keys(E).map(c=>`<option>${c}</option>`).join('')}</select><input id="fd" placeholder="Description"><input id="fp" type="number" placeholder="Price"><input id="fs" type="number" placeholder="Stock"><input id="fi" placeholder="Image URL (optional)"><br><button class="btn" onclick="addF()">Add Food</button></div>
+ <h2>Manage Food</h2>${tbl(['Food','Category','Price','Stock','Status','Actions'],foods.map(f=>[f.food_name,f.category,'₹'+ +f.price,f.available_quantity,f.availability&&f.available_quantity>0?'Available':'<span class="oos">Out of Stock</span>',
+ `<button class="btn s" onclick="edF(${f.food_id},'price')">Edit Price</button><button class="btn s" onclick="edF(${f.food_id},'stock')">Update Stock</button><button class="btn s" onclick="edF(${f.food_id},'toggle')">Toggle</button><button class="btn r" onclick="delF(${f.food_id})">Delete</button>`]))}`}
+async function addF(){await api('/foods','POST',{food_name:$('#fn').value,category:$('#fc').value,description:$('#fd').value,price:+$('#fp').value,available_quantity:+$('#fs').value,image:$('#fi').value});toast('Food added');go('a-foods')}
+async function edF(id,w){const f={...FL.find(x=>x.food_id==id)};if(w=='price')f.price=+prompt('New price',f.price);else if(w=='stock')f.available_quantity=+prompt('New stock',f.available_quantity);else f.availability=!f.availability;
+ await api('/foods/'+id,'PUT',f);toast('Updated');go('a-foods')}
+async function delF(id){if(confirm('Delete this item?')){await api('/foods/'+id,'DELETE');toast('Deleted');go('a-foods')}}
+async function aOrders(){const o=await api('/admin/orders');return '<h2>All Orders</h2>'+tbl(['Order ID','Student','Items','Amount','Pickup','Status','Completed at'],o.map(x=>['#'+x.order_id,x.student+' ('+x.college_id+')',x.items,'₹'+ +x.total_amount,x.pickup_time,
+ `<select onchange="setSt(${x.order_id},this.value)">${[...STEPS,'Cancelled'].map(s=>`<option ${s==x.order_status?'selected':''}>${s}</option>`).join('')}</select>`,x.completed_at?new Date(x.completed_at).toLocaleString():'']))}
+async function setSt(id,s){await api(`/admin/orders/${id}/status`,'PUT',{status:s});toast('Order #'+id+' → '+s);go('a-orders')}
+async function aPay(){const p=await api('/admin/payments');return '<h2>Payments</h2>'+tbl(['Payment ID','Order','Student','Amount','Method','Status','Date','Transaction ID'],p.map(x=>[x.payment_id,'#'+x.order_id,x.student,'₹'+ +x.amount,x.payment_method,x.payment_status,new Date(x.payment_date).toLocaleString(),x.transaction_id]))}
+async function aUsers(){const u=await api('/admin/users');return '<h2>Registered Students</h2>'+tbl(['College ID','Name','Email','Department','Year','Total Orders'],u.map(x=>[x.college_id,x.name,x.email,x.department,x.year,x.total_orders]))}
+go(user?(user.role==='admin'?'admin':'home'):'login');
+</script><script>
+if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));
+let dp;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;const b=document.getElementById('inst');b.style.display='block';b.onclick=async()=>{dp.prompt();await dp.userChoice;b.style.display='none'}});
+</script>
+</body></html>
